@@ -1,5 +1,6 @@
 ---
 title: "EDA SIP"
+author: "Julie Pessoa"
 output:
     html_document:
     df_print: paged
@@ -9,6 +10,9 @@ theme: sandstone
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(here)
+require(scales)
+library(knitr)
+library(kableExtra)
 source(here::here("code/lib.R"))
 theme_set(theme_bw())
 
@@ -60,6 +64,7 @@ estimativas = estimativas_raw %>%
         DeveloperPerformance = mean(DeveloperPerformance)
     ) %>%
     ungroup()
+estimativas
 ```
 
 ### Dados por time
@@ -70,11 +75,120 @@ por_time = estimativas_raw %>%
     summarise(devs = NROW(unique(DeveloperID)), 
               erro_medio_abs = mean(abs(HoursEstimate - HoursActual)), 
               estimativas = n())
+por_time
 ```
 
 
 ## Qual a relação entre as estimativas e horas reais tomadas na empresa como um todo e em diferentes categorias de tarefa?
+#### Análise da empresa como um todo
+Inicialmente, dando uma olhada geral nos dados temos:
+```{r}
+estimativas %>% 
+  ggplot(aes(x = HoursEstimate, y = HoursActual)) + 
+  geom_point(colour = "darkblue", size = 2)  +
+  labs(x = "Estimativa", y = "Horas Reais")
+```
 
+Podemos perceber que há uma concentração próximo ao zero. É possível notar que a relação entre estimativas e horas reais não é linear, podendo ser comprovado pela correlação de Pearson.
+```{r}
+estimativas %>%
+    summarise(pearson = cor(HoursEstimate, HoursActual, method = "pearson"),
+            spearman = cor(HoursEstimate, HoursActual, method = "spearman"), 
+            kendall = cor(HoursEstimate, HoursActual, method = "kendall"), ) %>%
+    kable(caption="Correlações entre Estimativa e Horas Reais", align='l') %>%
+    kable_styling()
+```
+A correlação de Person tem facilidade em captar correlações lineares e dado esse valor de 0.3 podemos concluir que a correlação é bem fraca.
+Não sendo linear, e observando que os métodos de spearman e kendall obtiveram resultados que propoe que há uma correlação entre as duas variáveis, podemos verficar os dados a partir de outra escala, como por exemplo a logaritmica.
+```{r}
+estimativas %>% 
+  ggplot(aes(x = HoursEstimate, y = HoursActual)) + 
+  geom_point(colour = "darkblue", size = 2) +
+  scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
+  labs(x = "Log10 Estimativa", y = "Horas Reais", title = "Estimativa em escala logaritmica")
+
+estimativas %>% 
+  ggplot(aes(x = HoursEstimate, y = HoursActual)) + 
+  geom_point(colour = "darkblue", size = 2) +
+  scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
+  labs(x = "Estimativa", y = "Horas Reais", title = "Horas Reais em escala logaritmica")
+```
+
+Aparentemente, utilizando a escala logaritmica em apenas uma grandeza ainda não é possível verificar uma correlação linear forte. Há uma melhora na correlação ao utilizar a variavel HoursActual em base logaritmica como é demonstrado abaixo pela correlação de pearson.
+
+
+```{r}
+estimativas %>%
+    summarise(pearson = cor(log10(HoursEstimate), HoursActual, method = "pearson")) %>%
+    kable(caption="Correlações entre o log10 da estimativa e as Horas reais", align='l') %>%
+    kable_styling()
+
+estimativas %>%
+    summarise(pearson = cor(HoursEstimate, log10(HoursActual), method = "pearson")) %>%
+    kable(caption="Correlações da Estimativa e o log10 das horas reais", align='l') %>%
+    kable_styling()
+```
+
+Ainda na tentativa de visualizar uma relação linear entre as duas variaveis, vamos utilizar a escala logaritmica nas duas variaveis.
+
+```{r}
+estimativas %>% 
+  ggplot(aes(x = HoursEstimate, y = HoursActual)) + 
+  geom_point(colour = "darkblue", size = 2) +
+  scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
+  scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
+  labs(x = "Estimativa", y = "Horas Reais", title = "As duas variaveis em escala logaritmica")
+```
+
+Com as duas variáveis em escala logaritmica é possível observar um correlação linear, relativamente forte e positiva entre o log da estimativa e das horas reais. Há uma tendência de que quanto maior as horas estimadas, maior as horas reais.
+
+#### Análise das diferentes categorias de tarefas
+Basicamente as correlações se mantém razoavelmente semelhante em relação as correlações gerais.
+```{r}
+estimativas %>% 
+  ggplot(aes(x = HoursEstimate, y = HoursActual)) +
+  geom_point(colour = "darkblue", size = 2) +
+  scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
+  scale_y_log10(labels = trans_format("log10", math_format(10^.x))) +
+  labs(x = "Estimativa", y = "Horas Reais", title = "As duas variaveis em escala logaritmica") +
+  facet_wrap(~Category)
+
+estimativas %>%
+    filter(Category == "Development") %>% summarise(pearson = cor(HoursEstimate, HoursActual, method = "pearson"), 
+            spearman = cor(HoursEstimate, HoursActual, method = "spearman"), 
+            kendall = cor(HoursEstimate, HoursActual, method = "kendall"), )  %>%
+    kable(caption="Correlações da Categoria Development", align='l') %>%
+    kable_styling()
+
+estimativas %>%
+    filter(Category == "Management") %>% summarise(pearson = cor(HoursEstimate, HoursActual, method = "pearson"), 
+            spearman = cor(HoursEstimate, HoursActual, method = "spearman"), 
+            kendall = cor(HoursEstimate, HoursActual, method = "kendall"), )  %>%
+    kable(caption="Correlações da Categoria Management", align='l') %>%
+    kable_styling()
+    
+estimativas %>%
+    filter(Category == "Operational") %>% summarise(pearson = cor(HoursEstimate, HoursActual, method = "pearson"), 
+            spearman = cor(HoursEstimate, HoursActual, method = "spearman"), 
+            kendall = cor(HoursEstimate, HoursActual, method = "kendall"), )  %>%
+    kable(caption="Correlações da Categoria Operational", align='l') %>%
+    kable_styling()
+```
 
 ## Equipes com mais desenvolvedores produzem estimativas com mais ou menos erro que equipes menores? 
 
+Na representação dos pontos abaixo é possível notar que não há uma correlação entre o número de desenvolvedores e o erro produzido. Observado os métodos de correlações, todos eles apresentam uma baixíssima correlação, portanto não vale a pena procurar alguma tranformação que mostre alguma correlação entre os dados.
+```{r}
+por_time %>% 
+  ggplot(aes(x = devs, y = erro_medio_abs)) + 
+  geom_point(colour = "darkblue", size = 4) +
+  labs(x = "Quantidade de desenvolvedores", y = "Erro médio")
+
+por_time %>%
+    summarise(pearson = cor(devs, erro_medio_abs, method = "pearson"), 
+            spearman = cor(devs,erro_medio_abs, method = "spearman"), 
+            kendall = cor(devs, erro_medio_abs, method = "kendall"), ) %>%
+    kable(caption="Correlações entre a quantidade de desenvolvedores e o erro produzido", align='l') %>%
+    kable_styling()
+
+```
